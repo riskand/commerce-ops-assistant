@@ -1,0 +1,60 @@
+# .github/workflows/evals.yml
+name: tests and evals
+
+on: [push, pull_request]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      db:
+        image: pgvector/pgvector:pg16
+        env: {POSTGRES_PASSWORD: dev, POSTGRES_DB: docsearch}
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql+asyncpg://postgres:dev@localhost/docsearch
+      DB_POOL_SIZE: "0"
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: pip install -r requirements.txt
+      - run: alembic upgrade head
+      # The fast tier first: it needs no model and no key, so a broken
+      # import fails the build in thirty seconds rather than after the
+      # evals have spent money finding out.
+      - run: pytest -q
+      - run: pytest -q -m integration -k "not live"
+
+  evals:
+    needs: test
+    runs-on: ubuntu-latest
+    # Forks do not get the key, and a job that cannot run must not look
+    # like a job that passed -- so this is skipped, visibly, not faked.
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    services:
+      db:
+        image: pgvector/pgvector:pg16
+        env: {POSTGRES_PASSWORD: dev, POSTGRES_DB: docsearch}
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd pg_isready --health-interval 5s --health-retries 10
+    env:
+      DATABASE_URL: postgresql+asyncpg://postgres:dev@localhost/docsearch
+      ANTHROPIC_API_KEY: ${{ secrets.ANTHROPIC_API_KEY }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with: {python-version: "3.12"}
+      - run: pip install -r requirements.txt -r requirements-local.txt
+      - run: alembic upgrade head
+      - run: uvicorn app.main:app --port 8000 &
+      - run: curl --retry 30 --retry-connrefused -sfo /dev/null localhost:8000/docs
+      - run: python -m evals.corpus
+      - run: python -m evals.run --out results.json
+      - run: python -m evals.gate results.json
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with: {name: eval-results, path: results.json}

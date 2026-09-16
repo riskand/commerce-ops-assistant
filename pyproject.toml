@@ -1,0 +1,8 @@
+[tool.pytest.ini_options]
+asyncio_mode = "auto"
+pythonpath = ["."]
+testpaths = ["tests"]
+markers = [
+    "integration: most need `docker compose up -d`; test_live.py's two tests instead need the local embedding model, and one of those two also spends a real ANTHROPIC_API_KEY",
+]
+addopts = "-m 'not integration'"

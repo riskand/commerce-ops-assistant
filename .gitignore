@@ -1,0 +1,21 @@
+# Local environment
+.env
+.venv/
+docker-compose.override.yml
+
+# Runtime output
+calls.jsonl
+results/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Editors and OS
+.idea/
+.vscode/
+.DS_Store

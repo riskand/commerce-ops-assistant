@@ -1,0 +1,54 @@
+# docker-compose.deploy.yml
+# The whole system, as three processes rather than one. `docker compose
+# -f docker-compose.deploy.yml up --build` is the one command the
+# checklist asks for, and it is the same topology a cluster runs: the
+# only thing that changes on the way to Kubernetes is who writes the YAML.
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    environment:
+      POSTGRES_PASSWORD: dev
+      POSTGRES_DB: docsearch
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - pg_isready -U postgres
+      interval: 5s
+      retries: 10
+
+  serving:
+    build:
+      context: .
+      args:
+        REQUIREMENTS: requirements-local.txt
+    command: uvicorn serving.main:app --host 0.0.0.0 --port 8001
+    healthcheck:
+      # /readyz, not /healthz: this container is not ready until both
+      # models are built, and routing traffic to it before then would
+      # make the API's first request pay the whole warm-up.
+      test:
+        - CMD-SHELL
+        - python -c "import urllib.request as u;
+          u.urlopen('http://localhost:8001/readyz')"
+      interval: 10s
+      retries: 30
+      start_period: 60s
+
+  api:
+    build:
+      context: .
+    ports:
+      - "8000:8000"
+    environment:
+      DATABASE_URL: postgresql+asyncpg://postgres:dev@db/docsearch
+      SERVING_URL: http://serving:8001
+      # No default, deliberately. A missing key must stop the deploy
+      # here, not surface as a 401 in front of a customer -- and the
+      # value comes from the environment your secret manager populates,
+      # never from a file baked into the image.
+      ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:?set it before deploying}
+    depends_on:
+      db:
+        condition: service_healthy
+      serving:
+        condition: service_healthy

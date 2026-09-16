@@ -1,0 +1,5 @@
+# The in-process embedder and reranker. Pulls torch: ~2GB, and the models
+# download on first use. The fast test tier never imports this.
+-r requirements.txt
+sentence-transformers
+peft
