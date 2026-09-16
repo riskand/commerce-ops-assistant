@@ -1,5 +1,6 @@
 # tests/test_schema.py
 import subprocess
+import sys
 
 import pytest
 import sqlalchemy
@@ -25,7 +26,7 @@ def test_the_vector_column_matches_the_embedder():
 
 @pytest.mark.integration
 def test_upgrade_head_produces_the_declared_columns():
-    subprocess.run([".venv/bin/alembic", "upgrade", "head"],
+    subprocess.run([sys.executable, "-m", "alembic", "upgrade", "head"],
                    check=True, capture_output=True)
     sync_url = DATABASE_URL.replace("+asyncpg", "+psycopg")
     engine = sqlalchemy.create_engine(sync_url)

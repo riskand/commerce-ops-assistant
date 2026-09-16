@@ -8,6 +8,7 @@ loads .env into os.environ itself, which is why the fast tier never
 caught this)."""
 import os
 import subprocess
+import sys
 from pathlib import Path
 
 import pytest
@@ -63,7 +64,7 @@ def test_alembic_upgrade_head_works_without_an_anthropic_key(tmp_path):
     clean_env = {"PATH": os.environ.get("PATH", ""),
                  "DATABASE_URL": db_module.DATABASE_URL}
     result = subprocess.run(
-        [str(root / ".venv/bin/alembic"), "-c", str(root / "alembic.ini"),
+        [sys.executable, "-m", "alembic", "-c", str(root / "alembic.ini"),
          "upgrade", "head"],
         cwd=tmp_path, env=clean_env, capture_output=True, text=True)
     assert result.returncode == 0, result.stderr
