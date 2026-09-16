@@ -9,11 +9,34 @@ from fastapi.testclient import TestClient
 
 import app.routes.docsearch as docsearch
 from app.main import app
+from tests.fakes import FakeEmbedder, FakeReranker
 
 pytestmark = pytest.mark.integration
 
+HIT = (uuid.uuid4(), "Returns are accepted within 30 days.", 1.0)
 
-def test_query_builds_its_prompt_from_the_registry(monkeypatch):
+
+@pytest.fixture
+def one_hit(monkeypatch):
+    """/query short-circuits to NOT_FOUND before it ever builds a prompt
+    when retrieval comes back empty, so a test about prompt assembly has
+    to guarantee a hit rather than inherit one from whatever happens to
+    be in the database. Retrieval has its own tests; this pins the one
+    thing these two assert on."""
+    async def fake_hybrid_search(*a, **kw):
+        return [HIT]
+    monkeypatch.setattr(docsearch, "hybrid_search", fake_hybrid_search)
+    monkeypatch.setattr(docsearch, "get_embedder",
+                        lambda: _ready(FakeEmbedder()))
+    monkeypatch.setattr(docsearch, "get_reranker",
+                        lambda: _ready(FakeReranker()))
+
+
+async def _ready(value):
+    return value
+
+
+def test_query_builds_its_prompt_from_the_registry(monkeypatch, one_hit):
     seen = {}
 
     async def fake_call_llm(messages, tools):
@@ -29,7 +52,7 @@ def test_query_builds_its_prompt_from_the_registry(monkeypatch):
     assert "what is the policy?" in seen["prompt"]
 
 
-def test_query_can_pin_a_prompt_version(monkeypatch):
+def test_query_can_pin_a_prompt_version(monkeypatch, one_hit):
     seen = {}
 
     async def fake_call_llm(messages, tools):
